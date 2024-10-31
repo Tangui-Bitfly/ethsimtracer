@@ -1,4 +1,4 @@
-module ethsimtracer
+module github.com/Tangui-Bitfly/ethsimtracer
 
 go 1.23.1
 
