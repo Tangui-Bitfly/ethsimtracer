@@ -1,13 +1,11 @@
 package ethsimtracer
 
 import (
-	"errors"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/catalyst"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -50,7 +48,7 @@ type simClient struct {
 // Backend is a simulated blockchain. You can use it to test your contracts or
 // other code that interacts with the Ethereum chain.
 type Backend struct {
-	node   *node.Node
+	eth    *eth.Ethereum
 	beacon *catalyst.SimulatedBeacon
 	client simClient
 }
@@ -59,7 +57,7 @@ type Backend struct {
 // contract bindings in unit tests.
 //
 // A simulated backend always uses chainID 1337.
-func NewBackend(alloc types.GenesisAlloc, options ...func(nodeConf *node.Config, ethConf *ethconfig.Config)) *Backend {
+func NewBackend(alloc core.GenesisAlloc, options ...func(nodeConf *node.Config, ethConf *ethconfig.Config)) *Backend {
 	// Create the default configurations for the outer node shell and the Ethereum
 	// service to mutate with the options afterwards
 	nodeConf := node.DefaultConfig
@@ -101,7 +99,7 @@ func newWithNode(stack *node.Node, conf *eth.Config, blockPeriod uint64) (*Backe
 	filterSystem := filters.NewFilterSystem(backend.APIBackend, filters.Config{})
 	stack.RegisterAPIs([]rpc.API{{
 		Namespace: "eth",
-		Service:   filters.NewFilterAPI(filterSystem),
+		Service:   filters.NewFilterAPI(filterSystem, false),
 	}})
 	// Register trace api, main change from the fork
 	stack.RegisterAPIs(tracers.APIs(backend.APIBackend))
@@ -119,7 +117,7 @@ func newWithNode(stack *node.Node, conf *eth.Config, blockPeriod uint64) (*Backe
 		return nil, err
 	}
 	return &Backend{
-		node:   stack,
+		eth:    backend,
 		beacon: beacon,
 		client: simClient{ethclient.NewClient(stack.Attach())},
 	}, nil
@@ -132,16 +130,12 @@ func (n *Backend) Close() error {
 		n.client.Close()
 		n.client = simClient{}
 	}
-	var err error
 	if n.beacon != nil {
-		err = n.beacon.Stop()
+		err := n.beacon.Stop()
 		n.beacon = nil
+		return err
 	}
-	if n.node != nil {
-		err = errors.Join(err, n.node.Close())
-		n.node = nil
-	}
-	return err
+	return nil
 }
 
 // Commit seals a block and moves the chain forward to a new empty block.
